@@ -5,7 +5,6 @@
 #include <cstring>
 #include <array>
 #include <chrono>
-#include <deque>
 #include <thread>
 
 #include <smmintrin.h>
@@ -13,7 +12,6 @@
 
 
 inline uint8_t LeftmostBlockSize(const uint8_t); 
-
 
 std::string Replace(const std::string&& src,
                     libcuckoo::cuckoohash_map<std::string, std::string>& search_table,
@@ -137,7 +135,7 @@ std::string Replace(const std::string&& src,
 }
 
 
-inline uint8_t LeftmostBlockSize(const uint8_t chr) {
+uint8_t LeftmostBlockSize(const uint8_t chr) {
     uint8_t size{2};
     std::array<uint8_t, 5> shift{0, 1, 2, 3, 4};
 
@@ -175,8 +173,6 @@ int main(int argc, char *argv[]) {
         if (pair[0].size() == 1)
             search_ascii = true;
     }
-
-    std::deque<std::string> chunk_deque;
 
     auto start_time = std::chrono::high_resolution_clock::now();
     auto result = Replace(std::move(content),
