@@ -12,20 +12,7 @@
 #include <libcuckoo/cuckoohash_map.hh>
 
 
-inline uint8_t LeftmostBlockSize(const uint8_t chr) {
-    uint8_t size{2};
-    std::array<uint8_t, 5> shift{0, 1, 2, 3, 4};
-
-    while (size <= 4) {
-        uint8_t leftmost_bit = chr << shift[size] & 0x80;
-        if(!leftmost_bit)
-            break;
-        
-        ++size;
-    }
-
-    return size;
-}
+inline uint8_t LeftmostBlockSize(const uint8_t); 
 
 
 std::string Replace(const std::string&& src,
@@ -61,8 +48,8 @@ std::string Replace(const std::string&& src,
         uint8_t start_points[16]{0};
         _mm_storeu_si128(reinterpret_cast<__m128i*>(start_points), start_points_p);
 
-		uint8_t j{0};
-		while (j < 16) {
+        uint8_t j{0};
+        while (j < 16) {
             if (uint8_t code_point_len = start_points[j]) {
                 std::string seek(c_src + i + j, code_point_len);
                 std::string result{};
@@ -94,7 +81,7 @@ std::string Replace(const std::string&& src,
             }
             ++unwritten_bytes;
             ++j;
-		}
+        }
         i += j;
     }
 
@@ -147,6 +134,21 @@ std::string Replace(const std::string&& src,
     }
     
     return dest;
+}
+
+
+inline uint8_t LeftmostBlockSize(const uint8_t chr) {
+    uint8_t size{2};
+    std::array<uint8_t, 5> shift{0, 1, 2, 3, 4};
+
+    while (size <= 4) {
+        uint8_t leftmost_bit = chr << shift[size] & 0x80;
+        if(!leftmost_bit)
+            break;
+        ++size;
+    }
+
+    return size;
 }
 
 
