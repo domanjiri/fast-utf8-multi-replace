@@ -19,7 +19,6 @@ inline uint8_t LeftmostBlockSize(const uint8_t);
 namespace {
 constexpr std::string_view kDataFileName = "Bijankhan_Corpus.txt";
 constexpr std::string_view kDictFileName = "dict.tsv";
-constexpr std::vector<std::string>::size_type kBlockSize = 4096;
 typedef tbb::concurrent_unordered_map<std::string, std::string> StringDictionay;
 } // end namespace
 
@@ -184,15 +183,26 @@ StringDictionay CreateDictionary(bool& search_ascii)
     return search_table;
 }
 
-std::vector<std::future<std::string>> ProcessByWorkers(const std::string& file_path,
+std::ifstream TouchFile(const std::string& file_path, uint64_t& len) {
+    std::ifstream input_file{file_path};
+
+    input_file.seekg(0, input_file.end);
+    len = input_file.tellg();
+    input_file.seekg(0, input_file.beg);
+
+    return input_file;
+}
+
+std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&& input_file,
+                                                       uint64_t input_file_len,
                                                        const StringDictionay& search_table,
                                                        bool search_ascii) {
-    std::ifstream input_file{file_path};
     std::vector<std::future<std::string>> workers;
-
+    const uint64_t kChunkSize = input_file_len / std::thread::hardware_concurrency();
+    
     while (!input_file.eof() && !input_file.fail()) {
-        std::vector<char> chunk(kBlockSize);
-        input_file.read(chunk.data(), kBlockSize);
+        std::vector<char> chunk(kChunkSize);
+        input_file.read(chunk.data(), kChunkSize);
         chunk.resize(input_file.gcount());
 
         workers.emplace_back(std::async([&](std::vector<char>&& data){
@@ -213,8 +223,11 @@ int main(int argc, char *argv[])
 
     bool search_ascii{false};
     auto search_table = CreateDictionary(search_ascii);
-    
-    auto result = ProcessByWorkers(static_cast<std::string>(kDataFileName),
+    uint64_t input_file_len{0};
+    auto input_file = TouchFile(static_cast<std::string>(kDataFileName), input_file_len);
+
+    auto result = ProcessByWorkers(std::move(input_file),
+                                   input_file_len,
                                    search_table,
                                    search_ascii);
     for (auto&& worker : result) {
