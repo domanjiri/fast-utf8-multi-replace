@@ -2,29 +2,42 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 #include <cstring>
 #include <array>
 #include <chrono>
+#include <future>
+#include <mutex>
 #include <thread>
 
 #include <smmintrin.h>
-#include <libcuckoo/cuckoohash_map.hh>
+#include <tbb/concurrent_unordered_map.h>
 
 
 inline uint8_t LeftmostBlockSize(const uint8_t); 
 
-std::string Replace(const std::string&& src,
-                    libcuckoo::cuckoohash_map<std::string, std::string>& search_table,
-                    uint64_t length,
-                    bool search_ascii) {
-    std::string dest{};
-    dest.resize(2 * length);
+namespace {
+constexpr std::string_view kDataFileName = "Bijankhan_Corpus.txt";
+constexpr std::string_view kDictFileName = "dict.tsv";
+constexpr std::vector<std::string>::size_type kBlockSize = 4096;
+typedef tbb::concurrent_unordered_map<std::string, std::string> StringDictionay;
+} // end namespace
 
+
+std::string Replace(const std::string&& src,
+                    uint64_t length,
+                    const StringDictionay& search_table,
+                    bool search_ascii)
+{
+    std::string dest{};
+    dest.resize(length * 2);
     auto c_src = src.c_str();
+    
     uint64_t i{0};
     uint64_t src_wr_cursor{0};
     uint64_t dst_wr_cursor{0};
     uint64_t unwritten_bytes{0};
+    
     while (length - i >= 16) {
         auto chunk = _mm_loadu_si128(static_cast<const __m128i*>(static_cast<const void*>(c_src + i))); 
         if (!_mm_movemask_epi8(chunk) && !search_ascii) {
@@ -50,9 +63,10 @@ std::string Replace(const std::string&& src,
         while (j < 16) {
             if (uint8_t code_point_len = start_points[j]) {
                 std::string seek(c_src + i + j, code_point_len);
-                std::string result{};
-                
-                if (search_table.find(seek, result)) {
+                StringDictionay::const_iterator it = search_table.find(seek);
+
+                if (it != search_table.end()) {
+                    const std::string result{it->second};
                     if (unwritten_bytes) {
                         memcpy(dest.data() + dst_wr_cursor,
                                c_src + src_wr_cursor,
@@ -92,9 +106,9 @@ std::string Replace(const std::string&& src,
        dst_wr_cursor += unwritten_bytes;
        unwritten_bytes = 0;
     }
-
+    
     while (i < length) {
-        if (src[i] & 0x80) { // ASCII 0x0-------
+        if (!(src[i] & 0x80)) { // ASCII 0x0-------
             memcpy(dest.data() + dst_wr_cursor,
                    c_src + src_wr_cursor,
                    1);
@@ -103,39 +117,36 @@ std::string Replace(const std::string&& src,
             ++i;
             continue;
         }
-        
+
         uint8_t len = LeftmostBlockSize(src[i]);
         std::string seek(c_src + i, len);
-        std::string result{};
-
-        if (search_table.find(seek, result)) {
+        StringDictionay::const_iterator it = search_table.find(seek);
+        
+        if (it != search_table.end()) {
+            std::string result{it->second};            
             memcpy(dest.data() + dst_wr_cursor,
                    result.data(),
                    result.size());
 
-            src_wr_cursor += len;
             dst_wr_cursor += result.size();
-            i += len;
-            continue;
         } else {
             memcpy(dest.data() + dst_wr_cursor,
                    c_src + src_wr_cursor,
                    len);
 
-            src_wr_cursor += len;
             dst_wr_cursor += len;
-            i += len;
-            continue;
         }
 
-        ++i;
+        src_wr_cursor += len;
+        i += len;
     }
     
     return dest;
 }
 
 
-uint8_t LeftmostBlockSize(const uint8_t chr) {
+uint8_t LeftmostBlockSize(const uint8_t chr)
+{
     uint8_t size{2};
     std::array<uint8_t, 5> shift{0, 1, 2, 3, 4};
 
@@ -150,17 +161,12 @@ uint8_t LeftmostBlockSize(const uint8_t chr) {
 }
 
 
-int main(int argc, char *argv[]) {
-    constexpr std::string_view kDataFileName = "Bijankhan_Corpus.txt";
-    constexpr std::string_view kDictFileName = "dict.tsv";
-
-    std::ifstream input_file{static_cast<std::string>(kDataFileName)};
-    std::string content((std::istreambuf_iterator<char>(input_file)),
-                           (std::istreambuf_iterator<char>()));
-
+StringDictionay CreateDictionary(bool& search_ascii)
+{
     std::ifstream dictionary_file{static_cast<std::string>(kDictFileName)};
-    bool search_ascii{false};
-    libcuckoo::cuckoohash_map<std::string, std::string> search_table{};
+    search_ascii = false;
+    
+    StringDictionay search_table{};
     std::string line{};
     while (std::getline(dictionary_file, line)) {
         std::istringstream single_line(line);
@@ -169,16 +175,52 @@ int main(int argc, char *argv[]) {
         if (pair.size() == 1) {
             pair.emplace_back("");
         }
-        search_table.insert(pair[0], pair[1]);
+        search_table.insert(std::make_pair(pair[0], pair[1]));
+
         if (pair[0].size() == 1)
             search_ascii = true;
     }
 
+    return search_table;
+}
+
+std::vector<std::future<std::string>> ProcessByWorkers(const std::string& file_path,
+                                                       const StringDictionay& search_table,
+                                                       bool search_ascii) {
+    std::ifstream input_file{file_path};
+    std::vector<std::future<std::string>> workers;
+
+    while (!input_file.eof() && !input_file.fail()) {
+        std::vector<char> chunk(kBlockSize);
+        input_file.read(chunk.data(), kBlockSize);
+        chunk.resize(input_file.gcount());
+
+        workers.emplace_back(std::async([&](std::vector<char>&& data){
+                std::string src(data.begin(), data.end());
+                return Replace(std::move(src),
+                               data.size(),
+                               search_table,
+                               search_ascii);
+            }, std::move(chunk)));
+    }
+
+    return workers;
+}
+
+int main(int argc, char *argv[])
+{
     auto start_time = std::chrono::high_resolution_clock::now();
-    auto result = Replace(std::move(content),
-                          search_table,
-                          content.size(),
-                          search_ascii);
+
+    bool search_ascii{false};
+    auto search_table = CreateDictionary(search_ascii);
+    
+    auto result = ProcessByWorkers(static_cast<std::string>(kDataFileName),
+                                   search_table,
+                                   search_ascii);
+    for (auto&& worker : result) {
+        worker.wait();
+    }
+
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 
