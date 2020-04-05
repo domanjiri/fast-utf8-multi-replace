@@ -1,26 +1,24 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <string>
-#include <vector>
-#include <cstring>
 #include <array>
+#include <vector>
+#include <string>
+#include <cstring>
 #include <chrono>
 #include <future>
-#include <mutex>
-#include <thread>
 
 #include <smmintrin.h>
 #include <tbb/concurrent_unordered_map.h>
 
 
+namespace {
+
 inline uint8_t LeftmostBlockSize(const uint8_t); 
 
-namespace {
 constexpr std::string_view kDataFileName = "Bijankhan_Corpus.txt";
 constexpr std::string_view kDictFileName = "dict.tsv";
 typedef tbb::concurrent_unordered_map<std::string, std::string> StringDictionay;
-} // end namespace
 
 
 std::string Replace(const std::string&& src,
@@ -183,6 +181,7 @@ StringDictionay CreateDictionary(bool& search_ascii)
     return search_table;
 }
 
+
 std::ifstream TouchFile(const std::string& file_path, uint64_t& len) {
     std::ifstream input_file{file_path};
 
@@ -192,6 +191,7 @@ std::ifstream TouchFile(const std::string& file_path, uint64_t& len) {
 
     return input_file;
 }
+
 
 std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&& input_file,
                                                        uint64_t input_file_len,
@@ -216,6 +216,9 @@ std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&& input_fil
 
     return workers;
 }
+
+} // namespace
+
 
 int main(int argc, char *argv[])
 {
