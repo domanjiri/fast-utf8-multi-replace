@@ -7,6 +7,7 @@
 #include <cstring>
 #include <chrono>
 #include <future>
+#include <utility>
 
 #include <smmintrin.h>
 #include <tbb/concurrent_unordered_map.h>
@@ -158,10 +159,10 @@ uint8_t LeftmostBlockSize(const uint8_t chr)
 }
 
 
-StringDictionay CreateDictionary(bool& search_ascii)
+std::pair<StringDictionay, bool> CreateDictionary()
 {
     std::ifstream dictionary_file{static_cast<std::string>(kDictFileName)};
-    search_ascii = false;
+    bool search_ascii{false};
     
     StringDictionay search_table{};
     std::string line{};
@@ -178,27 +179,34 @@ StringDictionay CreateDictionary(bool& search_ascii)
             search_ascii = true;
     }
 
-    return search_table;
+    return std::make_pair(search_table, search_ascii);
 }
 
 
-std::ifstream TouchFile(const std::string& file_path, uint64_t& len) {
+std::ifstream TouchFile(const std::string& file_path) {
     std::ifstream input_file{file_path};
-
-    input_file.seekg(0, input_file.end);
-    len = input_file.tellg();
-    input_file.seekg(0, input_file.beg);
 
     return input_file;
 }
 
 
+uint64_t GetFileLength(std::ifstream& file) {
+    uint64_t file_len{0};
+
+    file.seekg(0, file.end);
+    file_len = static_cast<uint64_t>(file.tellg());
+    file.seekg(0, file.beg);
+
+    return file_len;
+}
+
+
 std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&& input_file,
-                                                       uint64_t input_file_len,
                                                        const StringDictionay& search_table,
                                                        bool search_ascii) {
     std::vector<std::future<std::string>> workers;
-    const uint64_t kChunkSize = input_file_len / std::thread::hardware_concurrency();
+    const uint64_t kChunkSize = GetFileLength(input_file) / 
+                                std::thread::hardware_concurrency();
     
     while (!input_file.eof() && !input_file.fail()) {
         std::vector<char> chunk(kChunkSize);
@@ -224,13 +232,10 @@ int main(int argc, char *argv[])
 {
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    bool search_ascii{false};
-    auto search_table = CreateDictionary(search_ascii);
-    uint64_t input_file_len{0};
-    auto input_file = TouchFile(static_cast<std::string>(kDataFileName), input_file_len);
+    auto [search_table, search_ascii] = CreateDictionary();
+    auto input_file = TouchFile(static_cast<std::string>(kDataFileName));
 
     auto result = ProcessByWorkers(std::move(input_file),
-                                   input_file_len,
                                    search_table,
                                    search_ascii);
     for (auto&& worker : result) {
