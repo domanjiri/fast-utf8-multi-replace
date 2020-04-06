@@ -15,10 +15,9 @@ constexpr std::string_view kDictFileName = "dict.tsv";
 uint8_t LeftmostBlockSize(const uint8_t chr)
 {
     uint8_t size{2};
-    std::array<uint8_t, 5> shift{0, 1, 2, 3, 4};
 
     while (size <= 4) {
-        uint8_t leftmost_bit = chr << shift[size] & 0x80;
+        uint8_t leftmost_bit = chr << size & 0x80;
         if(!leftmost_bit)
             break;
         ++size;
