@@ -1,16 +1,10 @@
-#include <iostream>
 #include <cstring>
-#include <chrono>
 #include <smmintrin.h>
 
 #include "replace.hpp"
 
 
-namespace {
-
-constexpr std::string_view kDataFileName = "Bijankhan_Corpus.txt";
-constexpr std::string_view kDictFileName = "dict.tsv";
-
+namespace utf8mr {
 
 uint8_t LeftmostBlockSize(const uint8_t chr)
 {
@@ -27,9 +21,9 @@ uint8_t LeftmostBlockSize(const uint8_t chr)
 }
 
 
-std::pair<StringDictionay, bool> CreateDictionary()
+std::pair<StringDictionay, bool> CreateDictionary(const std::string& file_path)
 {
-    std::ifstream dictionary_file{static_cast<std::string>(kDictFileName)};
+    std::ifstream dictionary_file{file_path};
     bool search_ascii{false};
     
     StringDictionay search_table{};
@@ -226,27 +220,4 @@ std::string Replace(const std::string&& src,
 }
 
 } // namespace
-
-
-int main(int argc, char *argv[])
-{
-    auto start_time = std::chrono::high_resolution_clock::now();
-
-    auto [search_table, search_ascii] = CreateDictionary();
-    auto input_file = TouchFile(static_cast<std::string>(kDataFileName));
-
-    auto result = ProcessByWorkers(std::move(input_file),
-                                   search_table,
-                                   search_ascii);
-    for (auto&& worker : result) {
-        worker.wait();
-    }
-
-    auto end_time = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-
-    std::cout << "Elapsed time: " << duration << "ms" << std::endl;
-
-    return 0;
-}
 

@@ -8,7 +8,7 @@
 #include <tbb/concurrent_unordered_map.h>
 
 
-namespace {
+namespace utf8mr {
 
 typedef tbb::concurrent_unordered_map<std::string, std::string> StringDictionay;
 
@@ -17,7 +17,7 @@ std::string Replace(const std::string&&,
                     uint64_t,
                     const StringDictionay&,
                     bool);
-std::pair<StringDictionay, bool> CreateDictionary();
+std::pair<StringDictionay, bool> CreateDictionary(const std::string&);
 std::ifstream TouchFile(const std::string&);
 std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&&,
                                                        const StringDictionay&,
