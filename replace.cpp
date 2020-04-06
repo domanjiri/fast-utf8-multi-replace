@@ -1,10 +1,10 @@
 #include <iostream>
-#include <array>
 #include <cstring>
 #include <chrono>
 #include <smmintrin.h>
 
 #include "replace.hpp"
+
 
 namespace {
 
