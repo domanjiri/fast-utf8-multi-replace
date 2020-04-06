@@ -1,25 +1,15 @@
 #include <iostream>
-#include <fstream>
-#include <sstream>
 #include <array>
-#include <vector>
-#include <string>
 #include <cstring>
 #include <chrono>
-#include <future>
-#include <utility>
-
 #include <smmintrin.h>
-#include <tbb/concurrent_unordered_map.h>
 
+#include "replace.h"
 
 namespace {
 
-inline uint8_t LeftmostBlockSize(const uint8_t); 
-
 constexpr std::string_view kDataFileName = "Bijankhan_Corpus.txt";
 constexpr std::string_view kDictFileName = "dict.tsv";
-typedef tbb::concurrent_unordered_map<std::string, std::string> StringDictionay;
 
 
 std::string Replace(const std::string&& src,
