@@ -51,14 +51,16 @@ std::pair<StringDictionay, bool> CreateDictionary()
 }
 
 
-std::ifstream TouchFile(const std::string& file_path) {
+std::ifstream TouchFile(const std::string& file_path)
+{
     std::ifstream input_file{file_path};
 
     return input_file;
 }
 
 
-uint64_t GetFileLength(std::ifstream& file) {
+uint64_t GetFileLength(std::ifstream& file)
+{
     uint64_t file_len{0};
 
     file.seekg(0, file.end);
@@ -71,7 +73,8 @@ uint64_t GetFileLength(std::ifstream& file) {
 
 std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&& input_file,
                                                        const StringDictionay& search_table,
-                                                       bool search_ascii) {
+                                                       bool search_ascii)
+{
     std::vector<std::future<std::string>> workers;
     const uint64_t kChunkSize = GetFileLength(input_file) / 
                                 std::thread::hardware_concurrency();
@@ -102,7 +105,7 @@ std::string Replace(const std::string&& src,
     auto c_src = src.c_str();
     
     uint64_t i{0};
-    uint64_t src_wr_cursor{0};
+    uint64_t src_r_cursor{0};
     uint64_t dst_wr_cursor{0};
     uint64_t unwritten_bytes{0};
     
@@ -136,11 +139,15 @@ std::string Replace(const std::string&& src,
                 if (it != search_table.end()) {
                     const std::string result{it->second};
                     if (unwritten_bytes) {
+                        if (dest.size() < unwritten_bytes + length - src_r_cursor) {
+                            dest.resize(dst_wr_cursor + length, '\0');
+                        }
+
                         memcpy(dest.data() + dst_wr_cursor,
-                               c_src + src_wr_cursor,
+                               c_src + src_r_cursor,
                                unwritten_bytes);
                         
-                        src_wr_cursor += unwritten_bytes;
+                        src_r_cursor += unwritten_bytes;
                         dst_wr_cursor += unwritten_bytes;
                     }
 
@@ -149,7 +156,7 @@ std::string Replace(const std::string&& src,
                            result.size());
 
                     unwritten_bytes = 0;
-                    src_wr_cursor += code_point_len;
+                    src_r_cursor += code_point_len;
                     dst_wr_cursor += result.size();
                     j += code_point_len;
                     continue;
@@ -167,20 +174,24 @@ std::string Replace(const std::string&& src,
 
     if (unwritten_bytes) {
        memcpy(dest.data() + dst_wr_cursor,
-              c_src + src_wr_cursor,
+              c_src + src_r_cursor,
               unwritten_bytes);
        
-       src_wr_cursor += unwritten_bytes;
+       src_r_cursor += unwritten_bytes;
        dst_wr_cursor += unwritten_bytes;
        unwritten_bytes = 0;
     }
     
+    if (dest.size() < dst_wr_cursor + 16) {
+        dest.resize(dst_wr_cursor + 16 * 16, '\0');
+    }
+
     while (i < length) {
         if (!(src[i] & 0x80)) { // ASCII 0x0-------
             memcpy(dest.data() + dst_wr_cursor,
-                   c_src + src_wr_cursor,
+                   c_src + src_r_cursor,
                    1);
-            ++src_wr_cursor;
+            ++src_r_cursor;
             ++dst_wr_cursor;
             ++i;
             continue;
@@ -199,16 +210,18 @@ std::string Replace(const std::string&& src,
             dst_wr_cursor += result.size();
         } else {
             memcpy(dest.data() + dst_wr_cursor,
-                   c_src + src_wr_cursor,
+                   c_src + src_r_cursor,
                    len);
 
             dst_wr_cursor += len;
         }
 
-        src_wr_cursor += len;
+        src_r_cursor += len;
         i += len;
     }
-    
+
+    dest.resize(dst_wr_cursor);
+ 
     return dest;
 }
 
