@@ -4,7 +4,7 @@
 #include <chrono>
 #include <smmintrin.h>
 
-#include "replace.h"
+#include "replace.hpp"
 
 namespace {
 
@@ -12,13 +12,94 @@ constexpr std::string_view kDataFileName = "Bijankhan_Corpus.txt";
 constexpr std::string_view kDictFileName = "dict.tsv";
 
 
+uint8_t LeftmostBlockSize(const uint8_t chr)
+{
+    uint8_t size{2};
+    std::array<uint8_t, 5> shift{0, 1, 2, 3, 4};
+
+    while (size <= 4) {
+        uint8_t leftmost_bit = chr << shift[size] & 0x80;
+        if(!leftmost_bit)
+            break;
+        ++size;
+    }
+
+    return size;
+}
+
+
+std::pair<StringDictionay, bool> CreateDictionary()
+{
+    std::ifstream dictionary_file{static_cast<std::string>(kDictFileName)};
+    bool search_ascii{false};
+    
+    StringDictionay search_table{};
+    std::string line{};
+    while (std::getline(dictionary_file, line)) {
+        std::istringstream single_line(line);
+        std::vector<std::string> pair((std::istream_iterator<std::string>(single_line)),
+                                            std::istream_iterator<std::string>());
+        if (pair.size() == 1) {
+            pair.emplace_back("");
+        }
+        search_table.insert(std::make_pair(pair[0], pair[1]));
+
+        if (pair[0].size() == 1)
+            search_ascii = true;
+    }
+
+    return std::make_pair(search_table, search_ascii);
+}
+
+
+std::ifstream TouchFile(const std::string& file_path) {
+    std::ifstream input_file{file_path};
+
+    return input_file;
+}
+
+
+uint64_t GetFileLength(std::ifstream& file) {
+    uint64_t file_len{0};
+
+    file.seekg(0, file.end);
+    file_len = static_cast<uint64_t>(file.tellg());
+    file.seekg(0, file.beg);
+
+    return file_len;
+}
+
+
+std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&& input_file,
+                                                       const StringDictionay& search_table,
+                                                       bool search_ascii) {
+    std::vector<std::future<std::string>> workers;
+    const uint64_t kChunkSize = GetFileLength(input_file) / 
+                                std::thread::hardware_concurrency();
+    
+    while (!input_file.eof() && !input_file.fail()) {
+        std::string chunk(kChunkSize,'\0');
+        input_file.read(chunk.data(), kChunkSize);
+        chunk.resize(input_file.gcount());
+
+        workers.emplace_back(std::async([&](std::string&& data){
+                return Replace(std::move(data),
+                               data.size(),
+                               search_table,
+                               search_ascii);
+            }, std::move(chunk)));
+    }
+
+    return workers;
+}
+
+
 std::string Replace(const std::string&& src,
                     uint64_t length,
                     const StringDictionay& search_table,
                     bool search_ascii)
 {
-    std::string dest{};
-    dest.resize(length * 2);
+    std::string dest(length * 2, '\0');
     auto c_src = src.c_str();
     
     uint64_t i{0};
@@ -130,89 +211,6 @@ std::string Replace(const std::string&& src,
     }
     
     return dest;
-}
-
-
-uint8_t LeftmostBlockSize(const uint8_t chr)
-{
-    uint8_t size{2};
-    std::array<uint8_t, 5> shift{0, 1, 2, 3, 4};
-
-    while (size <= 4) {
-        uint8_t leftmost_bit = chr << shift[size] & 0x80;
-        if(!leftmost_bit)
-            break;
-        ++size;
-    }
-
-    return size;
-}
-
-
-std::pair<StringDictionay, bool> CreateDictionary()
-{
-    std::ifstream dictionary_file{static_cast<std::string>(kDictFileName)};
-    bool search_ascii{false};
-    
-    StringDictionay search_table{};
-    std::string line{};
-    while (std::getline(dictionary_file, line)) {
-        std::istringstream single_line(line);
-        std::vector<std::string> pair((std::istream_iterator<std::string>(single_line)),
-                                            std::istream_iterator<std::string>());
-        if (pair.size() == 1) {
-            pair.emplace_back("");
-        }
-        search_table.insert(std::make_pair(pair[0], pair[1]));
-
-        if (pair[0].size() == 1)
-            search_ascii = true;
-    }
-
-    return std::make_pair(search_table, search_ascii);
-}
-
-
-std::ifstream TouchFile(const std::string& file_path) {
-    std::ifstream input_file{file_path};
-
-    return input_file;
-}
-
-
-uint64_t GetFileLength(std::ifstream& file) {
-    uint64_t file_len{0};
-
-    file.seekg(0, file.end);
-    file_len = static_cast<uint64_t>(file.tellg());
-    file.seekg(0, file.beg);
-
-    return file_len;
-}
-
-
-std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&& input_file,
-                                                       const StringDictionay& search_table,
-                                                       bool search_ascii) {
-    std::vector<std::future<std::string>> workers;
-    const uint64_t kChunkSize = GetFileLength(input_file) / 
-                                std::thread::hardware_concurrency();
-    
-    while (!input_file.eof() && !input_file.fail()) {
-        std::vector<char> chunk(kChunkSize);
-        input_file.read(chunk.data(), kChunkSize);
-        chunk.resize(input_file.gcount());
-
-        workers.emplace_back(std::async([&](std::vector<char>&& data){
-                std::string src(data.begin(), data.end());
-                return Replace(std::move(src),
-                               data.size(),
-                               search_table,
-                               search_ascii);
-            }, std::move(chunk)));
-    }
-
-    return workers;
 }
 
 } // namespace
