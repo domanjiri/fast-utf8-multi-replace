@@ -29,10 +29,10 @@ $ ./test/replace_test
 
 
 ## Sample data
-Any Unicode valid text file can be used for search and replace. For dictionary file, look the test directory.
+Any valid Unicode text file can be used for search and replace. For dictionary file, look the test directory.
 
 
 ## Credits
 
-The SIMD part of code is in Indebtedness to the work of Olivier Goffart [here](https://woboq.com/blog/utf-8-processing-using-simd.html).
+The SIMD part of the code is in Indebtedness to the work of Olivier Goffart [here](https://woboq.com/blog/utf-8-processing-using-simd.html).
 
