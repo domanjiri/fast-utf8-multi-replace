@@ -14,7 +14,8 @@ constexpr std::string_view kDictFileName = "dict.tsv";
 
 } // namespace
 
-int main(int argc, char *argv[])
+
+int main(int argc, char* argv[])
 {
     auto start_time = std::chrono::high_resolution_clock::now();
     // Load dictionary file from disc. It should contain rows of tab separated chars
