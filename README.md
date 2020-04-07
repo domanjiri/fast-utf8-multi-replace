@@ -19,7 +19,7 @@ $ cmake ../
 $ make
 ```
 
-## Run Test
+## Running Tests
 
 When the project builds successful, Tests could be run from the build directory with this command:
 
