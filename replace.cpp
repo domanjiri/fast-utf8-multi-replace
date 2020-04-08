@@ -16,7 +16,8 @@ uint8_t LeftmostBlockSize(const uint8_t chr)
 
     // Left shift 8 bits binary to reach the first zero
     while (size <= 4) {
-        uint8_t leftmost_bit = chr << size & 0x80;
+        uint8_t shifted_char = chr << size;
+        uint8_t leftmost_bit = shifted_char & 0x80;
         if(!leftmost_bit)
             break;
         ++size;
