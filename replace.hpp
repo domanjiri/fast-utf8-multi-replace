@@ -38,4 +38,3 @@ std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&&,
                                                        bool);
 
 } // namespace
-

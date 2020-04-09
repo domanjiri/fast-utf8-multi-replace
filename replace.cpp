@@ -37,8 +37,8 @@ std::pair<StringDictionary, bool> CreateDictionary(const std::string& file_path)
     std::string line{};
     // Read each line of the file and put its key:value in hashtable
     while (std::getline(dictionary_file, line)) {
-        std::istringstream single_line(line);
-        std::vector<std::string> pair((std::istream_iterator<std::string>(single_line)),
+        std::istringstream current_line(line);
+        std::vector<std::string> pair((std::istream_iterator<std::string>(current_line)),
                                             std::istream_iterator<std::string>());
         // If replace chars do not exist, empty string will be replaced
         if (pair.size() == 1) {
@@ -57,7 +57,7 @@ std::pair<StringDictionary, bool> CreateDictionary(const std::string& file_path)
 std::ifstream TouchFile(const std::string& file_path)
 {
     std::ifstream input_file{file_path};
-    // Any preprocessing and validation ..
+    // Other preprocessing and validation ..
     return input_file;
 }
 
@@ -106,22 +106,22 @@ std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&& input_fil
 // Returns s string which seek code points replced in it.
 // We use SIMD 128 bit vector to improve performance.
 std::string Replace(const std::string&& src,
-                    uint64_t length,
+                    uint64_t src_len,
                     const StringDictionary& search_table,
                     bool search_ascii)
 {
-    std::string dest(length * 2, '\0'); // start with double size of input, it expands if necessary
+    std::string dest(src_len * 2, '\0'); // start with double size of input, it expands if necessary
     auto c_src = src.c_str();
     
-    uint64_t i{0};
-    uint64_t src_r_cursor{0}; // The last read/processed char in source
-    uint64_t dst_wr_cursor{0}; // The latest written byte position
+    uint64_t current_position{0};
+    uint64_t src_cursor_position{0}; // The last read/processed char in source
+    uint64_t dst_cursor_position{0}; // The latest written byte position
     uint64_t unwritten_bytes{0}; // Number of skipped char that should be just copied
     
-    while (length - i >= 16) { // Work with 128 bits (16x8)
-        auto chunk = _mm_loadu_si128(static_cast<const __m128i*>(static_cast<const void*>(c_src + i))); 
+    while (src_len - current_position >= 16) { // Work with 128 bits (16x8)
+        auto chunk = _mm_loadu_si128(static_cast<const __m128i*>(static_cast<const void*>(c_src + current_position)));
         if (!_mm_movemask_epi8(chunk) && !search_ascii) { // Skip ASCIIs
-            i += 16;
+            current_position += 16;
             unwritten_bytes += 16;
             continue;
         }
@@ -145,10 +145,10 @@ std::string Replace(const std::string&& src,
         uint8_t start_points[16]{0};
         _mm_storeu_si128(reinterpret_cast<__m128i*>(start_points), start_points_p);
 
-        uint8_t j{0};
-        while (j < 16) {
-            if (uint8_t code_point_len = start_points[j]) {
-                std::string seek(c_src + i + j, code_point_len);
+        uint8_t position_in_chunk{0};
+        while (position_in_chunk < 16) {
+            if (uint8_t codepoint_len = start_points[position_in_chunk]) {
+                std::string seek(c_src + current_position + position_in_chunk, codepoint_len);
                 // Search for code point in hashtable
                 StringDictionary::const_iterator it = search_table.find(seek);
                 // Replace chars found
@@ -157,94 +157,93 @@ std::string Replace(const std::string&& src,
                     // First copy any skipped chars
                     if (unwritten_bytes) {
                         // Reallocate memory if required
-                        if (dest.size() < unwritten_bytes + length - src_r_cursor) {
-                            dest.resize(dst_wr_cursor + length, '\0');
+                        if (dest.size() < unwritten_bytes + src_len - src_cursor_position) {
+                            dest.resize(dst_cursor_position + src_len, '\0');
                         }
                         // Copy skipped to destination
-                        memcpy(dest.data() + dst_wr_cursor,
-                               c_src + src_r_cursor,
+                        memcpy(dest.data() + dst_cursor_position,
+                               c_src + src_cursor_position,
                                unwritten_bytes);
 
-                        src_r_cursor += unwritten_bytes;
-                        dst_wr_cursor += unwritten_bytes;
+                        src_cursor_position += unwritten_bytes;
+                        dst_cursor_position += unwritten_bytes;
                     }
                     // Copy result of search in hashtable to destination string
-                    memcpy(dest.data() + dst_wr_cursor,
+                    memcpy(dest.data() + dst_cursor_position,
                            result.data(),
                            result.size());
 
                     unwritten_bytes = 0;
-                    src_r_cursor += code_point_len;
-                    dst_wr_cursor += result.size();
-                    j += code_point_len;
+                    src_cursor_position += codepoint_len;
+                    dst_cursor_position += result.size();
+                    position_in_chunk += codepoint_len;
                     continue;
                 }
                 // If search in hashtable has not any result, code point will be copied in next loop 
-                unwritten_bytes += code_point_len;
-                j += code_point_len;
+                unwritten_bytes += codepoint_len;
+                position_in_chunk += codepoint_len;
                 continue;
             }
             // If its a ASCII chars it will be copied in next loop
             ++unwritten_bytes;
-            ++j;
+            ++position_in_chunk;
         }
-        i += j;
+        current_position += position_in_chunk;
     }
     // Copy any skipped chars remained after last loop
     if (unwritten_bytes) {
-       memcpy(dest.data() + dst_wr_cursor,
-              c_src + src_r_cursor,
+       memcpy(dest.data() + dst_cursor_position,
+              c_src + src_cursor_position,
               unwritten_bytes);
-       
-       src_r_cursor += unwritten_bytes;
-       dst_wr_cursor += unwritten_bytes;
+
+        src_cursor_position += unwritten_bytes;
+        dst_cursor_position += unwritten_bytes;
        unwritten_bytes = 0;
     }
     // Reallocate memory if required
-    if (dest.size() < dst_wr_cursor + 16) {
-        dest.resize(dst_wr_cursor + 16 * 16, '\0');
+    if (dest.size() < dst_cursor_position + 16) {
+        dest.resize(dst_cursor_position + 16 * 16, '\0');
     }
-    // Search and replace latest part of source which has the length of lower than 16
-    while (i < length) {
-        if (!(src[i] & 0x80)) { // ASCII 0x0-------
-            memcpy(dest.data() + dst_wr_cursor,
-                   c_src + src_r_cursor,
+    // Search and replace latest part of source which has the src_len of lower than 16
+    while (current_position < src_len) {
+        if (!(src[current_position] & 0x80)) { // ASCII 0x0-------
+            memcpy(dest.data() + dst_cursor_position,
+                   c_src + src_cursor_position,
                    1);
-            ++src_r_cursor;
-            ++dst_wr_cursor;
-            ++i;
+            ++src_cursor_position;
+            ++dst_cursor_position;
+            ++current_position;
             continue;
         }
         // Get type of code point
-        uint8_t len = LeftmostBlockSize(src[i]);
-        std::string seek(c_src + i, len);
+        uint8_t codepoint_len = LeftmostBlockSize(src[current_position]);
+        std::string seek(c_src + current_position, codepoint_len);
         // Search for code point in hashtable
         StringDictionary::const_iterator it = search_table.find(seek);
         // If Search has any result
         if (it != search_table.end()) {
             std::string result{it->second};            
-            memcpy(dest.data() + dst_wr_cursor,
+            memcpy(dest.data() + dst_cursor_position,
                    result.data(),
                    result.size());
 
-            dst_wr_cursor += result.size();
+            dst_cursor_position += result.size();
         } else {
             // Just copy from source to destination string
-            memcpy(dest.data() + dst_wr_cursor,
-                   c_src + src_r_cursor,
-                   len);
+            memcpy(dest.data() + dst_cursor_position,
+                   c_src + src_cursor_position,
+                   codepoint_len);
 
-            dst_wr_cursor += len;
+            dst_cursor_position += codepoint_len;
         }
 
-        src_r_cursor += len;
-        i += len;
+        src_cursor_position += codepoint_len;
+        current_position += codepoint_len;
     }
     // Strip trailing zero chars from destination
-    dest.resize(dst_wr_cursor);
+    dest.resize(dst_cursor_position);
  
     return dest;
 }
 
 } // namespace
-
