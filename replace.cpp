@@ -28,12 +28,12 @@ uint8_t LeftmostBlockSize(const uint8_t chr)
 
 // Load dictionary file from disc and store its tab separated rows in a hashtable.
 // Also, it will be checked that if there exist any ASCII char in seek list.
-std::pair<StringDictionay, bool> CreateDictionary(const std::string& file_path)
+std::pair<StringDictionary, bool> CreateDictionary(const std::string& file_path)
 {
     std::ifstream dictionary_file{file_path};
     bool search_ascii{false};
     
-    StringDictionay search_table{};
+    StringDictionary search_table{};
     std::string line{};
     // Read each line of the file and put its key:value in hashtable
     while (std::getline(dictionary_file, line)) {
@@ -76,13 +76,13 @@ uint64_t GetFileLength(std::ifstream& file)
 
 // Returns Vector of asynchronous tasks.
 // Read text file in chunks and pass each chunk to one task/worker for processing.
-// Chunk length will be deduced from file size and number of CPU`s hyperthreads.
+// Chunk length will be deduced from file size and number of CPU`s hyper threads.
 std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&& input_file,
-                                                       const StringDictionay& search_table,
+                                                       const StringDictionary& search_table,
                                                        bool search_ascii)
 {
     std::vector<std::future<std::string>> workers;
-    // We choose size from this formula to reach as many tasks as the number of CPU`s hyperthreads 
+    // We choose size from this formula to reach as many tasks as the number of CPU`s hyper threads
     const uint64_t kChunkSize = GetFileLength(input_file) / 
                                 std::thread::hardware_concurrency();
     
@@ -107,7 +107,7 @@ std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&& input_fil
 // We use SIMD 128 bit vector to improve performance.
 std::string Replace(const std::string&& src,
                     uint64_t length,
-                    const StringDictionay& search_table,
+                    const StringDictionary& search_table,
                     bool search_ascii)
 {
     std::string dest(length * 2, '\0'); // start with double size of input, it expands if necessary
@@ -150,7 +150,7 @@ std::string Replace(const std::string&& src,
             if (uint8_t code_point_len = start_points[j]) {
                 std::string seek(c_src + i + j, code_point_len);
                 // Search for code point in hashtable
-                StringDictionay::const_iterator it = search_table.find(seek);
+                StringDictionary::const_iterator it = search_table.find(seek);
                 // Replace chars found
                 if (it != search_table.end()) {
                     const std::string result{it->second};
@@ -184,7 +184,7 @@ std::string Replace(const std::string&& src,
                 j += code_point_len;
                 continue;
             }
-            // If its a ADCII chars it will be copied in next loop
+            // If its a ASCII chars it will be copied in next loop
             ++unwritten_bytes;
             ++j;
         }
@@ -219,7 +219,7 @@ std::string Replace(const std::string&& src,
         uint8_t len = LeftmostBlockSize(src[i]);
         std::string seek(c_src + i, len);
         // Search for code point in hashtable
-        StringDictionay::const_iterator it = search_table.find(seek);
+        StringDictionary::const_iterator it = search_table.find(seek);
         // If Search has any result
         if (it != search_table.end()) {
             std::string result{it->second};            
