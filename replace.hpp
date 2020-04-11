@@ -19,6 +19,10 @@ inline uint8_t LeftmostBlockSize(const uint8_t);
 // Returns start points of unicode code points in vector of 16 char
 inline std::unique_ptr<uint8_t[]> GetStartPoint(__m128i&);
 
+inline std::string ReallocateIfNotEnough(std::string& str,
+                                         const uint64_t current_pos,
+                                         const uint64_t len_required);
+
 // Returns s string which seek code points replaced in it.
 std::string Replace(const std::string&&,    
                     uint64_t,

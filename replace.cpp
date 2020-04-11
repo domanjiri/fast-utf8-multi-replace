@@ -128,6 +128,17 @@ std::unique_ptr<uint8_t[]> GetStartPoint(__m128i& chunk)
 }
 
 
+std::string ReallocateIfNotEnough(std::string& str,
+                                  const uint64_t current_pos,
+                                  const uint64_t len_required)
+{
+    if (str.size() - current_pos < len_required) {
+        str.resize(current_pos + len_required, '\0');
+    }
+
+    return str;
+}
+
 // Returns s string which seek code points replced in it.
 // We use SIMD 128 bit vector to improve performance.
 std::string Replace(const std::string&& src,
@@ -163,10 +174,9 @@ std::string Replace(const std::string&& src,
                     const std::string result{it->second};
                     // First copy any skipped chars
                     if (unwritten_bytes) {
-                        // Reallocate memory if required
-                        if (dest.size() < unwritten_bytes + src_len - src_cursor_position) {
-                            dest.resize(dst_cursor_position + src_len, '\0');
-                        }
+                        dest = ReallocateIfNotEnough(dest,
+                                                     dst_cursor_position,
+                                                     unwritten_bytes + src_len - src_cursor_position);
                         // Copy skipped to destination
                         memcpy(dest.data() + dst_cursor_position,
                                c_src + src_cursor_position,
@@ -207,10 +217,8 @@ std::string Replace(const std::string&& src,
         dst_cursor_position += unwritten_bytes;
        unwritten_bytes = 0;
     }
-    // Reallocate memory if required
-    if (dest.size() < dst_cursor_position + 16) {
-        dest.resize(dst_cursor_position + 16 * 16, '\0');
-    }
+
+    dest = ReallocateIfNotEnough(dest, dst_cursor_position, 16 * 16);
     // Search and replace latest part of source which has the src_len of lower than 16
     while (current_position < src_len) {
         if (!(src[current_position] & 0x80)) { // ASCII 0x0-------
