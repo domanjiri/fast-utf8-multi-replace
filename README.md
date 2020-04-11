@@ -4,7 +4,7 @@ A task-based parallel search and replace which also benefits from concurrency at
 
 ## Requirements
 
-* GNU compiler with support for C++17 or c++2a
+* GNU compiler with support for C++17 or C++2a
 * CMake 3.10 and later
 * An SSE4.2 support processor
 * Intel`s Threading Building Blocks library
