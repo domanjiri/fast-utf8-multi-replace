@@ -74,6 +74,16 @@ TEST_F(ReplaceTest, MultipleCharMultipleRow)
 }
 
 
+TEST_F(ReplaceTest, MultipleCharMultipleRowLong)
+{
+    std::string src{"Test with utf-8 آب with بآ long ب آ"};
+    auto [dict, search_ascii] = utf8mr::CreateDictionary("multiple_char_multiple_row_dict.tsv");
+
+    auto result = utf8mr::Replace(std::move(src), src.size(), dict, search_ascii);
+    ASSERT_EQ("Test with utf-8 تابلو with بلوتا long بلو تا", result);
+}
+
+
 int main(int argc, char* argv[])
 {
     ::testing::InitGoogleTest(&argc, argv);
