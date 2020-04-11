@@ -1,5 +1,4 @@
 #include <cstring>
-#include <smmintrin.h>
 
 #include "replace.hpp"
 
@@ -103,6 +102,32 @@ std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&& input_fil
 }
 
 
+// Returns start points of unicode code points in vector of 16 char
+std::unique_ptr<uint8_t[]> GetStartPoint(__m128i& chunk)
+{
+    // Because compare only works with signed chars
+    auto chunk_signed = _mm_add_epi8(chunk, _mm_set1_epi8(0x80));
+    // Create a vector which contain number of succeeding chars of code points at
+    // the position of first char. For example:
+    //      src:            h e l l o سلام
+    //      start_points_p: 0 0 0 0 0 1 0 1 0 1 0 1 0
+    // More info at: https://woboq.com/blog/utf-8-processing-using-simd.html
+    auto state = _mm_set1_epi8(0x0 | 0x80);
+    auto w_2_bytes = _mm_cmplt_epi8( _mm_set1_epi8(0xc2 - 1 - 0x80), chunk_signed); // Two bytes code points
+    state = _mm_blendv_epi8(state , _mm_set1_epi8(0x2 | 0xc2),  w_2_bytes);
+    auto w_3_bytes = _mm_cmplt_epi8( _mm_set1_epi8(0xe0 - 1 - 0x80), chunk_signed); // Three bytes code points
+    state = _mm_blendv_epi8(state , _mm_set1_epi8(0x3 | 0xe0),  w_3_bytes);
+    auto w_4_bytes = _mm_cmplt_epi8(_mm_set1_epi8(0xf0 - 1 - 0x80), chunk_signed); // Four bytes code points
+    state = _mm_blendv_epi8(state , _mm_set1_epi8(0x4 | 0xf0),  w_4_bytes);
+    auto start_points_p =  _mm_and_si128(state, _mm_set1_epi8(0x7));
+
+    auto start_points = std::make_unique<uint8_t[]>(16);
+    _mm_storeu_si128(reinterpret_cast<__m128i*>(start_points.get()), start_points_p);
+
+    return start_points;
+}
+
+
 // Returns s string which seek code points replced in it.
 // We use SIMD 128 bit vector to improve performance.
 std::string Replace(const std::string&& src,
@@ -125,26 +150,8 @@ std::string Replace(const std::string&& src,
             unwritten_bytes += 16;
             continue;
         }
-        
-        // Because compare only works with signed chars
-        auto chunk_signed = _mm_add_epi8(chunk, _mm_set1_epi8(0x80));
-        // Create a vector which contain number of succeeding chars of code points at
-        // the position of first char. For example:
-        //      src:            h e l l o سلام
-        //      start_points_p: 0 0 0 0 0 1 0 1 0 1 0 1 0
-        // More info at: https://woboq.com/blog/utf-8-processing-using-simd.html
-        auto state = _mm_set1_epi8(0x0 | 0x80);
-        auto w_2_bytes = _mm_cmplt_epi8( _mm_set1_epi8(0xc2 - 1 - 0x80), chunk_signed); // Two bytes code points
-        state = _mm_blendv_epi8(state , _mm_set1_epi8(0x2 | 0xc2),  w_2_bytes);
-        auto w_3_bytes = _mm_cmplt_epi8( _mm_set1_epi8(0xe0 - 1 - 0x80), chunk_signed); // Three bytes code points
-        state = _mm_blendv_epi8(state , _mm_set1_epi8(0x3 | 0xe0),  w_3_bytes);
-        auto w_4_bytes = _mm_cmplt_epi8(_mm_set1_epi8(0xf0 - 1 - 0x80), chunk_signed); // Four bytes code points
-        state = _mm_blendv_epi8(state , _mm_set1_epi8(0x4 | 0xf0),  w_4_bytes);
-        auto start_points_p =  _mm_and_si128(state, _mm_set1_epi8(0x7));
 
-        uint8_t start_points[16]{0};
-        _mm_storeu_si128(reinterpret_cast<__m128i*>(start_points), start_points_p);
-
+        auto start_points = GetStartPoint(chunk);
         uint8_t position_in_chunk{0};
         while (position_in_chunk < 16) {
             if (uint8_t codepoint_len = start_points[position_in_chunk]) {
@@ -247,3 +254,4 @@ std::string Replace(const std::string&& src,
 }
 
 } // namespace
+

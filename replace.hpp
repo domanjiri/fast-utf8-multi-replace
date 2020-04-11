@@ -5,6 +5,7 @@
 #include <future>
 #include <utility>
 
+#include <smmintrin.h>
 #include <tbb/concurrent_unordered_map.h>
 
 
@@ -14,6 +15,9 @@ typedef tbb::concurrent_unordered_map<std::string, std::string> StringDictionary
 
 // Returns the length of one's block at leftmost of char.
 inline uint8_t LeftmostBlockSize(const uint8_t);
+
+// Returns start points of unicode code points in vector of 16 char
+inline std::unique_ptr<uint8_t[]> GetStartPoint(__m128i&);
 
 // Returns s string which seek code points replaced in it.
 std::string Replace(const std::string&&,    
@@ -38,3 +42,4 @@ std::vector<std::future<std::string>> ProcessByWorkers(std::ifstream&&,
                                                        bool);
 
 } // namespace
+
