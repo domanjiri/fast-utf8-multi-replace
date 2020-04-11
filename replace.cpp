@@ -139,6 +139,58 @@ std::string ReallocateIfNotEnough(std::string& str,
     return str;
 }
 
+
+std::string ReplaceCharByChar(std::string& src,
+                              const StringDictionary& search_table)
+{
+    uint8_t src_len = src.size();
+    std::string dest(src_len * 4, '\0');
+    auto c_src = src.c_str();
+    uint8_t current_position{0};
+    uint8_t src_cursor_position{0};
+    uint8_t dst_cursor_position{0};
+    while (current_position < src_len) {
+        if (!(src[current_position] & 0x80)) { // ASCII 0x0-------
+            memcpy(dest.data() + dst_cursor_position,
+                   c_src + src_cursor_position,
+                   1);
+            ++src_cursor_position;
+            ++dst_cursor_position;
+            ++current_position;
+            continue;
+        }
+        // Get type of code point
+        uint8_t codepoint_len = LeftmostBlockSize(src[current_position]);
+        std::string seek(c_src + current_position, codepoint_len);
+        // Search for code point in hashtable
+        StringDictionary::const_iterator it = search_table.find(seek);
+        // If Search has any result
+        if (it != search_table.end()) {
+            std::string result{it->second};
+            memcpy(dest.data() + dst_cursor_position,
+                   result.data(),
+                   result.size());
+
+            dst_cursor_position += result.size();
+        } else {
+            // Just copy from source to destination string
+            memcpy(dest.data() + dst_cursor_position,
+                   c_src + src_cursor_position,
+                   codepoint_len);
+
+            dst_cursor_position += codepoint_len;
+        }
+
+        src_cursor_position += codepoint_len;
+        current_position += codepoint_len;
+    }
+    // Strip trailing zero chars from destination
+    dest.resize(dst_cursor_position);
+
+    return dest;
+}
+
+
 // Returns s string which seek code points replced in it.
 // We use SIMD 128 bit vector to improve performance.
 std::string Replace(const std::string&& src,
@@ -217,46 +269,15 @@ std::string Replace(const std::string&& src,
         dst_cursor_position += unwritten_bytes;
        unwritten_bytes = 0;
     }
-
-    dest = ReallocateIfNotEnough(dest, dst_cursor_position, 16 * 16);
-    // Search and replace latest part of source which has the src_len of lower than 16
-    while (current_position < src_len) {
-        if (!(src[current_position] & 0x80)) { // ASCII 0x0-------
-            memcpy(dest.data() + dst_cursor_position,
-                   c_src + src_cursor_position,
-                   1);
-            ++src_cursor_position;
-            ++dst_cursor_position;
-            ++current_position;
-            continue;
-        }
-        // Get type of code point
-        uint8_t codepoint_len = LeftmostBlockSize(src[current_position]);
-        std::string seek(c_src + current_position, codepoint_len);
-        // Search for code point in hashtable
-        StringDictionary::const_iterator it = search_table.find(seek);
-        // If Search has any result
-        if (it != search_table.end()) {
-            std::string result{it->second};            
-            memcpy(dest.data() + dst_cursor_position,
-                   result.data(),
-                   result.size());
-
-            dst_cursor_position += result.size();
-        } else {
-            // Just copy from source to destination string
-            memcpy(dest.data() + dst_cursor_position,
-                   c_src + src_cursor_position,
-                   codepoint_len);
-
-            dst_cursor_position += codepoint_len;
-        }
-
-        src_cursor_position += codepoint_len;
-        current_position += codepoint_len;
-    }
     // Strip trailing zero chars from destination
     dest.resize(dst_cursor_position);
+
+    if (current_position < src_len) {
+        auto tail_part = src.substr(current_position, src_len - current_position);
+        auto last_processed_part = ReplaceCharByChar(tail_part,
+                                                     search_table);
+        dest += last_processed_part;
+    }
  
     return dest;
 }

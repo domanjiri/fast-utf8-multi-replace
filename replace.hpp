@@ -23,6 +23,9 @@ inline std::string ReallocateIfNotEnough(std::string& str,
                                          const uint64_t current_pos,
                                          const uint64_t len_required);
 
+std::string ReplaceCharByChar(std::string& src,
+                              const StringDictionary& search_table);
+
 // Returns s string which seek code points replaced in it.
 std::string Replace(const std::string&&,    
                     uint64_t,
