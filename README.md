@@ -34,5 +34,5 @@ Any valid Unicode text file can be used for search and replace. For dictionary f
 
 ## Credits
 
-The SIMD part of the code is in Indebtedness to the work of Olivier Goffart [here](https://woboq.com/blog/utf-8-processing-using-simd.html).
+The SIMD part of the code is in indebtedness to the work of Olivier Goffart [here](https://woboq.com/blog/utf-8-processing-using-simd.html).
 
